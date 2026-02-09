@@ -1,0 +1,64 @@
+# Pre-commit hooks for Customer Data Pipeline
+# Run: pre-commit install
+# Test: pre-commit run --all-files
+
+repos:
+  # =============================================================================
+  # Standard Hooks
+  # =============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+
+  # =============================================================================
+  # Python Linting & Formatting
+  # =============================================================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # =============================================================================
+  # Custom Project Hooks
+  # =============================================================================
+  - repo: local
+    hooks:
+      # Validate agent file format
+      - id: validate-agents
+        name: Validate Agent Files
+        entry: bash -c 'for f in .github/agents/*.agent.md; do [ -f "$f" ] && head -1 "$f" | grep -q "^---" || (echo "Invalid agent file: $f - must start with YAML frontmatter" && exit 1); done; exit 0'
+        language: system
+        pass_filenames: false
+        files: ^\.github/agents/.*\.agent\.md$
+
+      # Remind to update CHANGELOG when code changes
+      - id: changelog-reminder
+        name: CHANGELOG Reminder
+        entry: bash -c 'git diff --cached --name-only | grep -q "^src/" && ! git diff --cached --name-only | grep -q "CHANGELOG.md" && echo "⚠️  Code changed in src/ but CHANGELOG.md not updated. Consider updating!" || true'
+        language: system
+        pass_filenames: false
+        verbose: true
+
+      # Validate CSV files aren't corrupted
+      - id: validate-csv
+        name: Validate CSV Files
+        entry: bash -c 'for f in $(git diff --cached --name-only | grep "\.csv$"); do [ -f "$f" ] && python -c "import pandas as pd; pd.read_csv(\"$f\")" 2>/dev/null || (echo "Invalid CSV: $f" && exit 1); done; exit 0'
+        language: system
+        pass_filenames: false
+        files: \.csv$
+
+      # Check proposal format
+      - id: validate-proposals
+        name: Validate Proposal Format
+        entry: bash -c 'for f in $(git diff --cached --name-only | grep "^docs/proposals/.*\.md$" | grep -v TEMPLATE); do [ -f "$f" ] && grep -q "^## Summary" "$f" || (echo "Proposal missing Summary section: $f" && exit 1); done; exit 0'
+        language: system
+        pass_filenames: false
+        files: ^docs/proposals/.*\.md$
